@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>photo challenge</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <div>
+          <p class="eyebrow">LOCAL PHOTO EXPERIENCE</p>
+          <h1 id="booth-title">photo challenge</h1>
+        </div>
+        <span id="state-chip" class="chip">Bereit</span>
+      </header>
+      <section class="hero">
+        <div class="camera-card">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="canvas" hidden></canvas>
+          <canvas
+            id="bounding-boxes"
+            class="bounding-boxes"
+            aria-hidden="true"
+          ></canvas>
+          <div class="camera-overlay">
+            <span id="detection-dot" class="dot"></span
+            ><span id="detection-label">Kamera wird vorbereitet</span>
+          </div>
+          <div id="flash" class="flash" aria-hidden="true"></div>
+        </div>
+        <aside class="instruction-card">
+          <p class="eyebrow">SO EINFACH</p>
+          <h2 id="challenge-title">Deine Foto-Challenge wird geladen.</h2>
+          <p id="challenge-description">Einen Moment bitte.</p>
+          <label class="challenge-picker" for="challenge-select">
+            <span>Challenge auswählen</span>
+            <select id="challenge-select" disabled></select>
+          </label>
+          <div class="progress-info">
+            <span id="countdown">3.0 s</span><span>bis zum Foto</span>
+          </div>
+          <div class="progress-track">
+            <div id="progress" class="progress-bar"></div>
+          </div>
+          <button id="manual-capture" type="button">
+            Foto jetzt aufnehmen <span>→</span>
+          </button>
+        </aside>
+      </section>
+      <section id="share-card" class="share-card" hidden>
+        <img id="share-qr" alt="QR-Code zum Foto-Download" hidden />
+        <div>
+          <p id="share-eyebrow" class="eyebrow">FOTOAUTOMAT TEILEN</p>
+          <h2 id="share-title">Scan &amp; smile.</h2>
+          <p id="share-description">
+            Der QR-Code öffnet die temporäre öffentliche Website. Nach einer
+            Aufnahme verweist er direkt auf das Foto.
+          </p>
+          <a id="share-url" target="_blank" rel="noreferrer"></a>
+        </div>
+      </section>
+      <section class="gallery-section">
+        <div>
+          <p class="eyebrow">DEINE MOMENTE</p>
+          <h2>Zuletzt aufgenommen</h2>
+        </div>
+        <div id="gallery" class="gallery">
+          <p class="empty-gallery">Noch kein Foto aufgenommen.</p>
+        </div>
+      </section>
+    </main>
+    <template id="photo-template"
+      ><a class="photo" target="_blank"><img alt="Aufgenommenes Foto" /></a
+    ></template>
+    <script src="app.js"></script>
+  </body>
+</html>
