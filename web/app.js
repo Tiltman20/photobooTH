@@ -4,6 +4,7 @@ const canvas = document.querySelector('#canvas');
 const context = canvas.getContext('2d');
 const boxesCanvas = document.querySelector('#bounding-boxes');
 const boxesContext = boxesCanvas.getContext('2d');
+const cameraCard = document.querySelector('.camera-card');
 const progress = document.querySelector('#progress');
 const countdown = document.querySelector('#countdown');
 const stateChip = document.querySelector('#state-chip');
@@ -106,12 +107,14 @@ async function analyzeFrame() {
     const data = await response.json();
     await updateDetection(data);
   } catch (error) {
+    cameraCard.classList.remove('challenge-met');
     updateStatus('Verbindung fehlt', 'Lokaler Erkennungsdienst nicht erreichbar', false);
   } finally { analyzing = false; }
 }
 
 async function updateDetection(data) {
   drawBoxes(data);
+  cameraCard.classList.toggle('challenge-met', Boolean(data.complete));
   if (!data.complete) {
     const needsNewColor = challenge.id === 'color' && !armed;
     challengeSince = null; armed = true; progress.style.width = '0%'; countdown.textContent = '3.0 s';
