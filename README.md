@@ -20,6 +20,8 @@ Die Aufnahmen liegen anschliessend im Ordner `captures/`.
 
 Die Website waehlt bei jedem Neuaufruf zufaellig eine Challenge: Brille zeigen,
 rote Haare zeigen, Schnurrbart zeigen oder mindestens drei Personen im Bild.
+Bei der Farb-Challenge wird zusaetzlich zufaellig Blau, Rot, Gruen, Gelb, Weiss
+oder Schwarz als Kleidungsfarbe festgelegt.
 Die Kamera im Browser und das vorhandene lokale OpenCV-Modell erkennen die
 Aufgabe. Alle Fotos verbleiben im Ordner
 `captures/` auf diesem Rechner.

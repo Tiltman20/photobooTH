@@ -27,10 +27,11 @@ import qrcode
 from qrcode.image.svg import SvgPathImage
 
 from face_recognition import FaceDetector
-from main import (BRIDGE_THRESHOLD, CAPTURE_DIR, MUSTACHE_THRESHOLD,
-                  RED_HAIR_THRESHOLD, check_glasses, check_mustache,
+from main import (BRIDGE_THRESHOLD, CAPTURE_DIR, COLOR_CLOTHING_THRESHOLD,
+                  MUSTACHE_THRESHOLD, RED_HAIR_THRESHOLD, check_clothing_color,
+                  check_glasses, check_mustache,
                   check_red_hair, get_glasses_region, get_mustache_regions,
-                  get_red_hair_region)
+                  get_red_hair_region, get_clothing_region)
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = ROOT / "web"
@@ -72,8 +73,48 @@ CHALLENGES = (
         "active": "Schnurrbart erkannt",
         "boothName": "mustache booth",
     },
+    {
+        "id": "color",
+        "title": "Farb-Challenge wird geladen.",
+        "description": "Zeig uns ein Kleidungsstueck in der gewaehlten Farbe.",
+        "ready": "Kamera bereit – Farbe wird gezogen",
+        "waiting": "Warte auf eine Person mit der gesuchten Farbe",
+        "active": "Farbe erkannt",
+        "boothName": "colour booth",
+    },
 )
 CHALLENGES_BY_ID = {challenge["id"]: challenge for challenge in CHALLENGES}
+COLOR_OPTIONS = (
+    ("blue", "Blau", "blau", "blue"),
+    ("red", "Rot", "rot", "red"),
+    ("green", "Grün", "grün", "green"),
+    ("yellow", "Gelb", "gelb", "yellow"),
+    ("white", "Weiß", "weiß", "white"),
+    ("black", "Schwarz", "schwarz", "black"),
+)
+COLORS_BY_ID = {color[0]: color for color in COLOR_OPTIONS}
+
+
+def color_challenge(color_id: str | None = None) -> dict:
+    """Create a fresh colour challenge; a new colour is drawn for every round."""
+    color = COLORS_BY_ID.get(color_id) if color_id else None
+    color = color or random.choice(COLOR_OPTIONS)
+    identifier, name, adjective, accent = color
+    return {
+        "id": "color",
+        "color": identifier,
+        "title": f"Farb-Challenge: {name}",
+        "description": f"Zeig uns ein Kleidungsstueck in {adjective}. Wenn es drei Sekunden erkannt wird, speichern wir dein Foto automatisch.",
+        "ready": f"Kamera bereit – zeig etwas {adjective}s",
+        "waiting": f"Warte auf eine Person mit etwas {adjective}m",
+        "active": f"{name} erkannt",
+        "boothName": f"{accent} booth",
+    }
+
+
+def selected_challenge(challenge_id: str | None = None, color_id: str | None = None) -> dict:
+    challenge = CHALLENGES_BY_ID.get(challenge_id) if challenge_id else random.choice(CHALLENGES)
+    return color_challenge(color_id) if challenge["id"] == "color" else challenge
 
 
 class BoothHandler(SimpleHTTPRequestHandler):
@@ -98,7 +139,8 @@ class BoothHandler(SimpleHTTPRequestHandler):
         path = request.path
         if path == "/api/challenge":
             # A fresh browser visit gets its own randomly selected prompt.
-            self._json(random.choice(CHALLENGES))
+            query = parse_qs(request.query)
+            self._json(selected_challenge(query.get("only", [None])[0], query.get("color", [None])[0]))
             return
         if path == "/api/challenges":
             self._json({"challenges": CHALLENGES})
@@ -156,6 +198,13 @@ class BoothHandler(SimpleHTTPRequestHandler):
                 if regions:
                     boxes.append(_box("Schnurrbart", *regions[0], "sage"))
                     boxes.append(_box("Kinnbart-Pruefung", *regions[1], "peach"))
+        elif challenge["id"] == "color":
+            selected_color = challenge["color"]
+            best_score = max((check_clothing_color(frame, face, selected_color) for face in faces), default=0.0)
+            for face in faces:
+                bounds = get_clothing_region(frame, face)
+                if bounds:
+                    boxes.append(_box(f"{challenge['title'].removeprefix('Farb-Challenge: ')} Kleidung", *bounds, selected_color))
         else:
             boxes = [_box(f"Person {index + 1}", face.x, face.y, face.x + face.width, face.y + face.height, "lavender")
                      for index, face in enumerate(faces)]
@@ -166,6 +215,8 @@ class BoothHandler(SimpleHTTPRequestHandler):
             if challenge["id"] == "red_hair"
             else best_score >= MUSTACHE_THRESHOLD
             if challenge["id"] == "mustache"
+            else best_score >= COLOR_CLOTHING_THRESHOLD
+            if challenge["id"] == "color"
             else len(faces) >= 3
         )
         self._json({
@@ -173,6 +224,7 @@ class BoothHandler(SimpleHTTPRequestHandler):
             "glasses": best_score >= BRIDGE_THRESHOLD,
             "redHairScore": round(best_score, 3) if challenge["id"] == "red_hair" else 0.0,
             "mustacheScore": round(best_score, 3) if challenge["id"] == "mustache" else 0.0,
+            "colorScore": round(best_score, 3) if challenge["id"] == "color" else 0.0,
             "boxes": boxes,
             "frameWidth": frame.shape[1],
             "frameHeight": frame.shape[0],
@@ -243,9 +295,11 @@ class BoothHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _requested_challenge(self) -> dict:
-        """Use the challenge the browser received, with a safe default."""
-        requested = parse_qs(urlparse(self.path).query).get("challenge", [""])[0]
-        return CHALLENGES_BY_ID.get(requested, CHALLENGES_BY_ID["glasses"])
+        """Use the challenge and colour the browser received, with safe defaults."""
+        query = parse_qs(urlparse(self.path).query)
+        requested = query.get("challenge", [""])[0]
+        color = query.get("color", [None])[0]
+        return selected_challenge(requested, color) if requested else CHALLENGES_BY_ID["glasses"]
 
     def log_message(self, format: str, *args) -> None:
         """Keep the terminal focused on startup and errors."""

@@ -18,6 +18,7 @@ BRIDGE_THRESHOLD = 0.55
 RED_HAIR_THRESHOLD = 0.06
 RED_HAIR_MIN_SATURATION = 95
 RED_HAIR_MIN_TEXTURE = 13.0
+COLOR_CLOTHING_THRESHOLD = 0.16
 MUSTACHE_THRESHOLD = 0.14
 MUSTACHE_DARK_VALUE = 125
 GLASSES_HOLD_SECONDS = 3.0
@@ -224,6 +225,39 @@ def get_red_hair_region(frame: np.ndarray, face) -> tuple[int, int, int, int] | 
     y1 = max(0, face.y - int(face.height * .30))
     y2 = min(frame.shape[0], face.y + int(face.height * .13))
     return (x1, y1, x2, y2) if x2 > x1 and y2 > y1 else None
+
+
+def get_clothing_region(frame: np.ndarray, face) -> tuple[int, int, int, int] | None:
+    """Return the torso area below a detected face for colour-based challenges."""
+    x1 = max(0, face.x - int(face.width * .25))
+    x2 = min(frame.shape[1], face.x + int(face.width * 1.25))
+    y1 = min(frame.shape[0], face.y + int(face.height * .70))
+    y2 = min(frame.shape[0], face.y + int(face.height * 3.20))
+    return (x1, y1, x2, y2) if x2 > x1 and y2 > y1 else None
+
+
+def check_clothing_color(frame: np.ndarray, face, color: str) -> float:
+    """Return the portion of a person's visible torso matching a named colour."""
+    bounds = get_clothing_region(frame, face)
+    if bounds is None:
+        return 0.0
+    x1, y1, x2, y2 = bounds
+    hsv = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
+    if color == "blue":
+        mask = cv2.inRange(hsv, (92, 75, 45), (130, 255, 255))
+    elif color == "red":
+        mask = cv2.bitwise_or(cv2.inRange(hsv, (0, 90, 45), (10, 255, 255)), cv2.inRange(hsv, (170, 90, 45), (179, 255, 255)))
+    elif color == "green":
+        mask = cv2.inRange(hsv, (38, 65, 40), (88, 255, 255))
+    elif color == "yellow":
+        mask = cv2.inRange(hsv, (20, 90, 70), (37, 255, 255))
+    elif color == "white":
+        mask = cv2.inRange(hsv, (0, 0, 165), (179, 55, 255))
+    elif color == "black":
+        mask = cv2.inRange(hsv, (0, 0, 0), (179, 255, 65))
+    else:
+        return 0.0
+    return float(cv2.countNonZero(mask) / mask.size)
 
 
 def check_mustache(frame: np.ndarray, face) -> float:

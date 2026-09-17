@@ -74,12 +74,18 @@ function applyChallenge() {
 }
 
 challengeSelect.addEventListener('change', () => {
-  challenge = challenges.find(item => item.id === challengeSelect.value);
+  selectChallenge(challengeSelect.value);
+});
+
+async function selectChallenge(id) {
+  challenge = id === 'color'
+    ? await (await fetch('/api/challenge?only=color')).json()
+    : challenges.find(item => item.id === id);
   challengeSince = null; armed = true;
   progress.style.width = '0%'; countdown.textContent = '3.0 s';
   applyChallenge();
   updateStatus('Bereit', challenge.ready);
-});
+}
 
 function frameBlob(quality = .82) {
   const maxWidth = 640;
@@ -94,19 +100,25 @@ async function analyzeFrame() {
   if (analyzing || !video.videoWidth) return;
   analyzing = true;
   try {
-    const response = await fetch(`/api/analyze?challenge=${encodeURIComponent(challenge.id)}`, { method: 'POST', body: await frameBlob(.68), headers: { 'Content-Type': 'image/jpeg' } });
+    const colorQuery = challenge.color ? `&color=${encodeURIComponent(challenge.color)}` : '';
+    const response = await fetch(`/api/analyze?challenge=${encodeURIComponent(challenge.id)}${colorQuery}`, { method: 'POST', body: await frameBlob(.68), headers: { 'Content-Type': 'image/jpeg' } });
     if (!response.ok) throw new Error('Analyse fehlgeschlagen');
     const data = await response.json();
-    updateDetection(data);
+    await updateDetection(data);
   } catch (error) {
     updateStatus('Verbindung fehlt', 'Lokaler Erkennungsdienst nicht erreichbar', false);
   } finally { analyzing = false; }
 }
 
-function updateDetection(data) {
+async function updateDetection(data) {
   drawBoxes(data);
   if (!data.complete) {
+    const needsNewColor = challenge.id === 'color' && !armed;
     challengeSince = null; armed = true; progress.style.width = '0%'; countdown.textContent = '3.0 s';
+    if (needsNewColor) {
+      await selectChallenge('color');
+      return;
+    }
     const noFace = data.faceCount === 0;
     const waiting = challenge.id !== 'group' && noFace ? 'Warte auf ein Gesicht' : challenge.waiting;
     updateStatus('Bereit', waiting);
@@ -127,7 +139,7 @@ function drawBoxes(data) {
   boxesCanvas.width = data.frameWidth;
   boxesCanvas.height = data.frameHeight;
   boxesContext.clearRect(0, 0, boxesCanvas.width, boxesCanvas.height);
-  const colors = { lavender: '#b9a1e9', rose: '#ed9eb2', sage: '#75c58b', peach: '#f3a97d' };
+  const colors = { lavender: '#b9a1e9', rose: '#ed9eb2', sage: '#75c58b', peach: '#f3a97d', blue: '#6da9ec', red: '#ed7f83', green: '#75c58b', yellow: '#e8c95b', white: '#ffffff', black: '#393234' };
   boxesContext.font = '600 15px ui-sans-serif, system-ui';
   for (const box of data.boxes || []) {
     const color = colors[box.color] || '#ffffff';
