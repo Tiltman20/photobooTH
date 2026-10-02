@@ -1,4 +1,4 @@
-"""Local web server for the glasses photo booth.
+"""Local web server for the photo booth.
 
 Run with: python src/web_server.py
 Then open http://localhost:8000 in a browser.
@@ -9,15 +9,14 @@ from __future__ import annotations
 import argparse
 import io
 import json
-import random
+import logging
+import os
 import shutil
 import subprocess
 import threading
 import time
-from datetime import datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
@@ -26,104 +25,64 @@ import numpy as np
 import qrcode
 from qrcode.image.svg import SvgPathImage
 
+from challenges import (DRAWING_KINDS, FREE_MODES, GESTURE_KINDS, Challenge, challenge_catalogue, evaluate,
+                        parse_code, random_challenge)
+from config import FACE_MODEL_PATH, WEB_ROOT
+from face_dataclass import Face
 from face_recognition import FaceDetector
-from main import (BRIDGE_THRESHOLD, CAPTURE_DIR, COLOR_CLOTHING_THRESHOLD,
-                  MUSTACHE_THRESHOLD, RED_HAIR_THRESHOLD, check_clothing_color,
-                  check_glasses, check_mustache,
-                  check_red_hair, get_glasses_region, get_mustache_regions,
-                  get_red_hair_region, get_clothing_region)
+from hand_challenges import GESTURE_EVALUATOR, HAND_EVALUATORS, DRAWING_EVALUATOR
+from hand_detection import ensure_model
+from overlay import Evaluation
+from photo_store import PhotoStore
+from settings import SettingsStore
 
-ROOT = Path(__file__).resolve().parent.parent
-WEB_ROOT = ROOT / "web"
-MODEL_PATH = ROOT / "res" / "models" / "face_detection_yunet_2026may.onnx"
-CHALLENGES = (
-    {
-        "id": "glasses",
-        "title": "Zeig uns dein schönstes Brillengesicht.",
-        "description": "Wenn deine Brille für drei Sekunden erkannt wird, speichern wir dein Foto automatisch.",
-        "ready": "Kamera bereit – zeig deine Brille",
-        "waiting": "Gesicht erkannt – Brille ins Bild halten",
-        "active": "Brille erkannt",
-        "boothName": "glasses booth",
-    },
-    {
-        "id": "group",
-        "title": "Zeit für ein Gruppenfoto.",
-        "description": "Sobald mindestens drei Personen für drei Sekunden im Bild sind, speichern wir euer Foto automatisch.",
-        "ready": "Kamera bereit – hol deine Gruppe dazu",
-        "waiting": "Warte auf mindestens drei Personen im Bild",
-        "active": "Gruppe vollständig",
-        "boothName": "group booth",
-    },
-    {
-        "id": "red_hair",
-        "title": "Zeig uns deine rote Mähne.",
-        "description": "Wenn rote Haare für drei Sekunden erkannt werden, speichern wir dein Foto automatisch.",
-        "ready": "Kamera bereit – zeig dein rotes Haar",
-        "waiting": "Warte auf eine Person mit roten Haaren",
-        "active": "Rote Haare erkannt",
-        "boothName": "red hair booth",
-    },
-    {
-        "id": "mustache",
-        "title": "Zeig uns deinen Schnurrbart.",
-        "description": "Wenn ein Schnurrbart für drei Sekunden erkannt wird, speichern wir dein Foto automatisch.",
-        "ready": "Kamera bereit – zeig deinen Schnurrbart",
-        "waiting": "Warte auf eine Person mit Schnurrbart",
-        "active": "Schnurrbart erkannt",
-        "boothName": "mustache booth",
-    },
-    {
-        "id": "color",
-        "title": "Farb-Challenge wird geladen.",
-        "description": "Zeig uns ein Kleidungsstueck in der gewaehlten Farbe.",
-        "ready": "Kamera bereit – Farbe wird gezogen",
-        "waiting": "Warte auf eine Person mit der gesuchten Farbe",
-        "active": "Farbe erkannt",
-        "boothName": "colour booth",
-    },
-)
-CHALLENGES_BY_ID = {challenge["id"]: challenge for challenge in CHALLENGES}
-COLOR_OPTIONS = (
-    ("blue", "Blau", "blau", "blue"),
-    ("red", "Rot", "rot", "red"),
-    ("green", "Grün", "grün", "green"),
-    ("yellow", "Gelb", "gelb", "yellow"),
-    ("white", "Weiß", "weiß", "white"),
-    ("black", "Schwarz", "schwarz", "black"),
-)
-COLORS_BY_ID = {color[0]: color for color in COLOR_OPTIONS}
+logger = logging.getLogger("photobooth")
+
+# Bump when the API changes; the browser compares it to detect an outdated server.
+APP_VERSION = "party-6"
+
+# ngrok sharing is switched off for now; flip to True to allow --ngrok again.
+NGROK_ENABLED = False
 
 
-def color_challenge(color_id: str | None = None) -> dict:
-    """Create a fresh colour challenge; a new colour is drawn for every round."""
-    color = COLORS_BY_ID.get(color_id) if color_id else None
-    color = color or random.choice(COLOR_OPTIONS)
-    identifier, name, adjective, accent = color
-    return {
-        "id": "color",
-        "color": identifier,
-        "title": f"Farb-Challenge: {name}",
-        "description": f"Zeig uns ein Kleidungsstueck in {adjective}. Wenn es drei Sekunden erkannt wird, speichern wir dein Foto automatisch.",
-        "ready": f"Kamera bereit – zeig etwas {adjective}s",
-        "waiting": f"Warte auf eine Person mit etwas {adjective}m",
-        "active": f"{name} erkannt",
-        "boothName": f"{accent} booth",
-    }
+PHOTO_STORE = PhotoStore()
+SETTINGS = SettingsStore()
 
 
-def selected_challenge(challenge_id: str | None = None, color_id: str | None = None) -> dict:
-    challenge = CHALLENGES_BY_ID.get(challenge_id) if challenge_id else random.choice(CHALLENGES)
-    return color_challenge(color_id) if challenge["id"] == "color" else challenge
+def challenge_json(kind: str | None, avoid_code: str | None) -> dict:
+    """A free mode by name, or a random variant of the requested (or any) challenge kind."""
+    if kind in FREE_MODES:
+        return FREE_MODES[kind]
+    return random_challenge(kind, avoid_code).to_json()
 
 
+def evaluate_frame(code: str, frame: np.ndarray, detect_faces) -> tuple[Evaluation, int]:
+    """Run the challenge given by its code; returns the evaluation and the number of faces."""
+    if code in HAND_EVALUATORS:  # hand modes skip the face detector to stay fast
+        return HAND_EVALUATORS[code](frame, [], {}), 0
+    challenge = parse_code(code) or Challenge("glasses", 1)
+    if challenge.kind in GESTURE_KINDS:
+        return GESTURE_EVALUATOR(challenge, frame), 0
+    faces = detect_faces(frame)
+    if challenge.kind in DRAWING_KINDS:
+        return DRAWING_EVALUATOR(challenge, frame, faces), len(faces)
+    return evaluate(challenge, frame, faces), len(faces)
+
+
+# --------------------------------------------------------------- servers
 class BoothHandler(SimpleHTTPRequestHandler):
-    detector = FaceDetector(str(MODEL_PATH))
+    detector = FaceDetector(str(FACE_MODEL_PATH))
     detector_lock = threading.Lock()
     public_url: str | None = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_ROOT), **kwargs)
+
+    def end_headers(self) -> None:
+        # Nothing is cached: a reload always gets the current app.js, photos never stay in the browser cache.
+        if not self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
@@ -131,6 +90,16 @@ class BoothHandler(SimpleHTTPRequestHandler):
             self._analyze()
         elif path == "/api/captures":
             self._save_capture()
+        elif path == "/api/settings":
+            self._update_settings()
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_DELETE(self) -> None:
+        path = urlparse(self.path).path
+        if path.startswith("/api/photos/"):
+            PHOTO_STORE.delete(path.removeprefix("/api/photos/"))
+            self._json({"deleted": True})
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -138,12 +107,18 @@ class BoothHandler(SimpleHTTPRequestHandler):
         request = urlparse(self.path)
         path = request.path
         if path == "/api/challenge":
-            # A fresh browser visit gets its own randomly selected prompt.
+            # Every call draws a fresh variant; 'avoid' prevents the same one twice in a row.
             query = parse_qs(request.query)
-            self._json(selected_challenge(query.get("only", [None])[0], query.get("color", [None])[0]))
+            self._json(challenge_json(query.get("only", [None])[0], query.get("avoid", [None])[0]))
+            return
+        if path == "/api/settings":
+            self._json(SETTINGS.to_json())
+            return
+        if path == "/api/health":
+            self._json({"version": APP_VERSION, "handDetector": "mediapipe"})
             return
         if path == "/api/challenges":
-            self._json({"challenges": CHALLENGES})
+            self._json({"challenges": challenge_catalogue()})
             return
         if path == "/api/share":
             self._json({"url": self.public_url})
@@ -151,129 +126,95 @@ class BoothHandler(SimpleHTTPRequestHandler):
         if path == "/api/share/qr":
             self._share_qr()
             return
-        if path.startswith("/captures/"):
-            self._serve_capture(path.removeprefix("/captures/"))
+        if path.startswith("/photos/"):
+            send_photo(self, path.removeprefix("/photos/"))
             return
         super().do_GET()
 
-    def _read_image(self) -> np.ndarray | None:
+    def _read_body(self, max_bytes: int = 4_000_000) -> bytes | None:
         try:
             size = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             return None
-        if not 0 < size <= 4_000_000:
+        if not 0 < size <= max_bytes:
             return None
-        raw = self.rfile.read(size)
-        return cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+        return self.rfile.read(size)
+
+    def _read_image(self) -> tuple[bytes, np.ndarray] | None:
+        """Raw JPEG bytes plus the decoded frame, or None for an invalid upload."""
+        raw = self._read_body()
+        if raw is None:
+            return None
+        frame = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+        return None if frame is None else (raw, frame)
 
     def _analyze(self) -> None:
-        frame = self._read_image()
-        if frame is None:
-            self._json({"error": "Ungueltiges Bild"}, HTTPStatus.BAD_REQUEST)
+        upload = self._read_image()
+        if upload is None:
+            self._json({"error": "Ungültiges Bild"}, HTTPStatus.BAD_REQUEST)
             return
-        with self.detector_lock:
-            faces = self.detector.detect(frame)
-        challenge = self._requested_challenge()
-        best_score = 0.0
-        boxes: list[dict[str, int | str]] = []
-        if challenge["id"] == "glasses":
-            for face in faces:
-                bounds = get_glasses_region(frame, face)
-                if bounds is None:
-                    continue
-                x1, y1, x2, y2 = bounds
-                boxes.append(_box("Brille", x1, y1, x2, y2, "lavender"))
-                score, _ = check_glasses(frame[y1:y2, x1:x2])
-                best_score = max(best_score, score)
-        elif challenge["id"] == "red_hair":
-            best_score = max((check_red_hair(frame, face) for face in faces), default=0.0)
-            for face in faces:
-                bounds = get_red_hair_region(frame, face)
-                if bounds:
-                    boxes.append(_box("Rote Haare", *bounds, "rose"))
-        elif challenge["id"] == "mustache":
-            best_score = max((check_mustache(frame, face) for face in faces), default=0.0)
-            for face in faces:
-                regions = get_mustache_regions(frame, face)
-                if regions:
-                    boxes.append(_box("Schnurrbart", *regions[0], "sage"))
-                    boxes.append(_box("Kinnbart-Pruefung", *regions[1], "peach"))
-        elif challenge["id"] == "color":
-            selected_color = challenge["color"]
-            best_score = max((check_clothing_color(frame, face, selected_color) for face in faces), default=0.0)
-            for face in faces:
-                bounds = get_clothing_region(frame, face)
-                if bounds:
-                    boxes.append(_box(f"{challenge['title'].removeprefix('Farb-Challenge: ')} Kleidung", *bounds, selected_color))
-        else:
-            boxes = [_box(f"Person {index + 1}", face.x, face.y, face.x + face.width, face.y + face.height, "lavender")
-                     for index, face in enumerate(faces)]
-        complete = (
-            best_score >= BRIDGE_THRESHOLD
-            if challenge["id"] == "glasses"
-            else best_score >= RED_HAIR_THRESHOLD
-            if challenge["id"] == "red_hair"
-            else best_score >= MUSTACHE_THRESHOLD
-            if challenge["id"] == "mustache"
-            else best_score >= COLOR_CLOTHING_THRESHOLD
-            if challenge["id"] == "color"
-            else len(faces) >= 3
-        )
+        _, frame = upload
+        code = self._query_value("challenge") or "glasses:1"
+        try:
+            evaluation, face_count = evaluate_frame(code, frame, self._detect_faces)
+        except Exception as error:  # report every analysis failure instead of dropping the connection
+            logger.exception("Analyse für Challenge '%s' fehlgeschlagen", code)
+            self._json({"error": f"{type(error).__name__}: {error}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
         self._json({
-            "faceCount": len(faces),
-            "glasses": best_score >= BRIDGE_THRESHOLD,
-            "redHairScore": round(best_score, 3) if challenge["id"] == "red_hair" else 0.0,
-            "mustacheScore": round(best_score, 3) if challenge["id"] == "mustache" else 0.0,
-            "colorScore": round(best_score, 3) if challenge["id"] == "color" else 0.0,
-            "boxes": boxes,
+            "faceCount": face_count,
+            "boxes": evaluation.boxes,
+            "circles": evaluation.circles,
+            "lines": evaluation.lines,
             "frameWidth": frame.shape[1],
             "frameHeight": frame.shape[0],
-            "score": round(best_score, 3),
-            "complete": complete,
+            "score": round(evaluation.score, 3),
+            "complete": evaluation.complete,
+            "statusText": evaluation.status_text,
+            "debug": evaluation.debug,
+            "pointer": evaluation.pointer,
+            "faces": evaluation.faces,
+            "progress": evaluation.progress,
         })
 
-    def _save_capture(self) -> None:
-        frame = self._read_image()
-        if frame is None:
-            self._json({"error": "Ungueltiges Bild"}, HTTPStatus.BAD_REQUEST)
-            return
-        CAPTURE_DIR.mkdir(exist_ok=True)
-        name = f"photo_{datetime.now():%Y-%m-%d_%H-%M-%S}.jpg"
-        if not cv2.imwrite(str(CAPTURE_DIR / name), frame):
-            self._json({"error": "Foto konnte nicht gespeichert werden"}, HTTPStatus.INTERNAL_SERVER_ERROR)
-            return
-        self._json({"filename": name, "url": f"/captures/{name}"}, HTTPStatus.CREATED)
+    def _detect_faces(self, frame: np.ndarray) -> list[Face]:
+        with self.detector_lock:
+            return self.detector.detect(frame)
 
-    def _serve_capture(self, filename: str) -> None:
-        # Only the generated flat filenames are allowed.
-        if Path(filename).name != filename or not filename.endswith(".jpg"):
-            self.send_error(HTTPStatus.NOT_FOUND)
+    def _save_capture(self) -> None:
+        """Keep the photo in memory only; it is deleted after the display time."""
+        upload = self._read_image()
+        if upload is None:
+            self._json({"error": "Ungültiges Bild"}, HTTPStatus.BAD_REQUEST)
             return
-        file_path = CAPTURE_DIR / filename
-        if not file_path.is_file():
-            self.send_error(HTTPStatus.NOT_FOUND)
+        jpeg, _ = upload
+        lifetime = SETTINGS.timing.photo_display_seconds
+        token = PHOTO_STORE.put(jpeg, lifetime_seconds=lifetime)
+        self._json({"token": token, "url": f"/photos/{token}", "expiresInSeconds": lifetime}, HTTPStatus.CREATED)
+
+    def _update_settings(self) -> None:
+        raw = self._read_body(max_bytes=20_000)
+        try:
+            payload = json.loads(raw or b"{}")
+        except ValueError:
+            self._json({"error": "Ungültige Einstellungen"}, HTTPStatus.BAD_REQUEST)
             return
-        data = file_path.read_bytes()
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "image/jpeg")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        if payload.get("reset"):
+            self._json(SETTINGS.reset())
+        else:
+            self._json(SETTINGS.update(payload.get("values", {})))
 
     def _share_qr(self) -> None:
         if not self.public_url:
             self.send_error(HTTPStatus.NOT_FOUND, "ngrok ist nicht aktiv")
             return
-        requested_photo = parse_qs(urlparse(self.path).query).get("photo", [""])[0]
+        token = self._query_value("photo") or ""
         target_url = self.public_url
-        if requested_photo:
-            if Path(requested_photo).name != requested_photo or not requested_photo.endswith(".jpg"):
+        if token:
+            if PHOTO_STORE.get(token) is None:
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            if not (CAPTURE_DIR / requested_photo).is_file():
-                self.send_error(HTTPStatus.NOT_FOUND)
-                return
-            target_url = f"{self.public_url}/photo/{requested_photo}"
+            target_url = f"{self.public_url}/photo/{token}"
         image = qrcode.make(target_url, image_factory=SvgPathImage, border=2)
         buffer = io.BytesIO()
         image.save(buffer)
@@ -286,7 +227,7 @@ class BoothHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _json(self, payload: dict, status: HTTPStatus = HTTPStatus.OK) -> None:
-        body = json.dumps(payload).encode("utf-8")
+        body = json.dumps(payload, default=json_default).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -294,48 +235,60 @@ class BoothHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _requested_challenge(self) -> dict:
-        """Use the challenge and colour the browser received, with safe defaults."""
-        query = parse_qs(urlparse(self.path).query)
-        requested = query.get("challenge", [""])[0]
-        color = query.get("color", [None])[0]
-        return selected_challenge(requested, color) if requested else CHALLENGES_BY_ID["glasses"]
+    def _query_value(self, name: str) -> str | None:
+        return parse_qs(urlparse(self.path).query).get(name, [None])[0]
 
     def log_message(self, format: str, *args) -> None:
         """Keep the terminal focused on startup and errors."""
 
 
+def json_default(value):
+    """Convert numpy values (e.g. numpy.bool_ from comparisons) that json cannot encode."""
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def send_photo(handler: SimpleHTTPRequestHandler, token: str, as_download: bool = False) -> None:
+    """Answer with a stored photo, or 404 once it has been deleted."""
+    jpeg = PHOTO_STORE.get(token)
+    if jpeg is None:
+        handler.send_error(HTTPStatus.NOT_FOUND, "Foto ist bereits gelöscht")
+        return
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", "image/jpeg")
+    if as_download:
+        handler.send_header("Content-Disposition", 'attachment; filename="photobooth.jpg"')
+    handler.send_header("Content-Length", str(len(jpeg)))
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
+    handler.wfile.write(jpeg)
+
+
+class ExclusiveHTTPServer(ThreadingHTTPServer):
+    """HTTP server that refuses to share its port.
+
+    On Windows, SO_REUSEADDR lets a second server bind a port that an old,
+    still running server uses; requests then randomly reach the old code.
+    """
+
+    allow_reuse_address = os.name != "nt"
+
+
 class PhotoShareHandler(SimpleHTTPRequestHandler):
-    """The only handler exposed through ngrok: it serves one requested JPG."""
+    """The only handler exposed through ngrok: it serves one photo while it still exists."""
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if not path.startswith("/photo/"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
-        filename = path.removeprefix("/photo/")
-        if Path(filename).name != filename or not filename.endswith(".jpg"):
-            self.send_error(HTTPStatus.NOT_FOUND)
-            return
-        file_path = CAPTURE_DIR / filename
-        if not file_path.is_file():
-            self.send_error(HTTPStatus.NOT_FOUND)
-            return
-        data = file_path.read_bytes()
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "image/jpeg")
-        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(data)
+        send_photo(self, path.removeprefix("/photo/"), as_download=True)
 
     def log_message(self, format: str, *args) -> None:
         """Avoid logging each QR-code download to the main terminal."""
-
-
-def _box(label: str, x1: int, y1: int, x2: int, y2: int, color: str) -> dict[str, int | str]:
-    return {"label": label, "x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1, "color": color}
 
 
 class NgrokTunnel:
@@ -357,7 +310,7 @@ class NgrokTunnel:
         deadline = time.monotonic() + 12
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
-                raise RuntimeError("ngrok konnte nicht starten. Pruefe den Authtoken mit 'ngrok config add-authtoken'.")
+                raise RuntimeError("ngrok konnte nicht starten. Prüfe den Authtoken mit 'ngrok config add-authtoken'.")
             try:
                 with urlopen("http://127.0.0.1:4040/api/tunnels", timeout=.5) as response:
                     tunnels = json.load(response)["tunnels"]
@@ -379,24 +332,37 @@ class NgrokTunnel:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     parser = argparse.ArgumentParser(description="Lokaler Photo-Booth-Webserver")
     parser.add_argument("--port", type=int, default=8000, help="Lokaler Port (Standard: 8000)")
-    parser.add_argument("--share-port", type=int, default=8001, help="Lokaler, nur fuer ngrok bestimmter Foto-Port (Standard: 8001)")
-    parser.add_argument("--ngrok", action="store_true", help="Oeffentlichen HTTPS-Tunnel mit ngrok starten")
+    parser.add_argument("--share-port", type=int, default=8001, help="Lokaler, nur für ngrok bestimmter Foto-Port (Standard: 8001)")
+    parser.add_argument("--ngrok", action="store_true", help="Öffentlichen HTTPS-Tunnel mit ngrok starten (derzeit deaktiviert)")
     args = parser.parse_args()
     if args.port == args.share_port:
-        raise SystemExit("--port und --share-port muessen verschieden sein.")
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), BoothHandler)
-    share_server = ThreadingHTTPServer(("127.0.0.1", args.share_port), PhotoShareHandler) if args.ngrok else None
+        raise SystemExit("--port und --share-port müssen verschieden sein.")
+    use_ngrok = args.ngrok and NGROK_ENABLED
+    if args.ngrok and not NGROK_ENABLED:
+        print("Hinweis: ngrok ist vorübergehend deaktiviert – der Server läuft nur lokal.")
+    try:
+        server = ExclusiveHTTPServer(("127.0.0.1", args.port), BoothHandler)
+    except OSError as error:
+        raise SystemExit(f"Port {args.port} ist belegt – läuft noch ein alter Server? "
+                         f"Alte Python-Prozesse beenden oder --port wählen. ({error})") from error
+    share_server = ExclusiveHTTPServer(("127.0.0.1", args.share_port), PhotoShareHandler) if use_ngrok else None
     share_thread = threading.Thread(target=share_server.serve_forever, daemon=True) if share_server else None
-    tunnel = NgrokTunnel(args.share_port) if args.ngrok else None
-    print(f"Glasses Photo Booth: http://localhost:{args.port}")
-    print("Die Challenge wird bei jedem Neuaufruf der Website zufaellig gewaehlt.")
+    tunnel = NgrokTunnel(args.share_port) if use_ngrok else None
+    print(f"Photo Booth: http://localhost:{args.port}  (Version {APP_VERSION})")
+    print("Die Challenge wird bei jedem Neuaufruf der Website zufällig gewählt.")
+    print("Challenges, Luftmalerei und Hand-Debug: im Dropdown auswählen.")
+    try:
+        ensure_model()
+    except RuntimeError as error:
+        print(f"Warnung: {error}\nDie Hand-Challenge ist ohne Modell nicht verfügbar.")
     if tunnel:
         try:
             share_thread.start()
             BoothHandler.public_url = tunnel.start()
-            print(f"Oeffentlicher Foto-Download: {BoothHandler.public_url}")
+            print(f"Öffentlicher Foto-Download: {BoothHandler.public_url}")
         except RuntimeError as error:
             server.server_close()
             share_server.shutdown()

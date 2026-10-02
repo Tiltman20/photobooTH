@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>photo challenge</title>
-    <link rel="stylesheet" href="style.css?v=2" />
+    <link rel="stylesheet" href="style.css?v=19" />
   </head>
   <body>
     <main class="app-shell">
@@ -13,7 +13,10 @@
           <p class="eyebrow">LOCAL PHOTO EXPERIENCE</p>
           <h1 id="booth-title">photo challenge</h1>
         </div>
-        <span id="state-chip" class="chip">Bereit</span>
+        <div class="header-chips">
+          <span id="state-chip" class="chip">Bereit</span>
+          <button id="settings-button" class="icon-button" type="button" aria-label="Einstellungen" title="Einstellungen">⚙</button>
+        </div>
       </header>
       <section class="hero">
         <div class="camera-card">
@@ -24,9 +27,23 @@
             class="bounding-boxes"
             aria-hidden="true"
           ></canvas>
+          <canvas id="air-canvas" class="air-canvas" aria-hidden="true" hidden></canvas>
+          <div id="draw-guide" class="draw-guide" hidden>
+            <p class="draw-guide-title">So malst du in die Luft</p>
+            <ul>
+              <li><span aria-hidden="true">☝️</span>Nur Zeigefinger: <b>malen</b></li>
+              <li><span aria-hidden="true">✌️</span>Zwei Finger oder Faust: <b>Stift absetzen</b></li>
+              <li><span aria-hidden="true">🖐️</span><span id="guide-erase">Hand offen 1 s halten: alles löschen</span></li>
+              <li><span aria-hidden="true">🔑</span>Stift holen: Zeigefinger zeigen · abgeben: Hand kurz aus dem Bild</li>
+            </ul>
+            <p id="pen-status" class="pen-status">Stift: frei – Zeigefinger zeigen zum Übernehmen</p>
+          </div>
           <div class="camera-overlay">
             <span id="detection-dot" class="dot"></span
             ><span id="detection-label">Kamera wird vorbereitet</span>
+          </div>
+          <div id="countdown-overlay" class="countdown-overlay" aria-live="polite" hidden>
+            <span id="countdown-number" class="countdown-number">3</span>
           </div>
           <div id="flash" class="flash" aria-hidden="true"></div>
         </div>
@@ -34,46 +51,77 @@
           <p class="eyebrow">SO EINFACH</p>
           <h2 id="challenge-title">Deine Foto-Challenge wird geladen.</h2>
           <p id="challenge-description">Einen Moment bitte.</p>
+          <div class="challenge-meta">
+            <div id="people-progress" class="people-progress" hidden></div>
+          </div>
           <label class="challenge-picker" for="challenge-select">
             <span>Challenge auswählen</span>
             <select id="challenge-select" disabled></select>
           </label>
+          <div id="debug-panel" class="debug-panel" hidden>
+            <p class="eyebrow">DEBUG · HANDERKENNUNG</p>
+            <p id="debug-details"></p>
+          </div>
           <div class="progress-info">
             <span id="countdown">3.0 s</span><span>bis zum Foto</span>
           </div>
           <div class="progress-track">
             <div id="progress" class="progress-bar"></div>
           </div>
-          <button id="manual-capture" type="button">
-            Foto jetzt aufnehmen <span>→</span>
+          <button id="air-clear" class="secondary-button" type="button" hidden>
+            Zeichnung löschen <span>×</span>
           </button>
+          <button id="skip-challenge" class="secondary-button" type="button">
+            Andere Challenge <span>↻</span>
+          </button>
+          <button id="manual-capture" type="button">
+            <b id="manual-capture-label">Foto jetzt aufnehmen</b> <span>→</span>
+          </button>
+          <section id="share-card" class="share-card" hidden>
+            <img id="share-qr" alt="QR-Code zum Foto-Download" hidden />
+            <div>
+              <p id="share-eyebrow" class="eyebrow">FOTOAUTOMAT TEILEN</p>
+              <h2 id="share-title">Scan &amp; smile.</h2>
+              <p id="share-description">
+                Der QR-Code öffnet die temporäre öffentliche Website. Nach einer
+                Aufnahme verweist er direkt auf das Foto.
+              </p>
+              <a id="share-url" target="_blank" rel="noreferrer"></a>
+            </div>
+          </section>
         </aside>
       </section>
-      <section id="share-card" class="share-card" hidden>
-        <img id="share-qr" alt="QR-Code zum Foto-Download" hidden />
-        <div>
-          <p id="share-eyebrow" class="eyebrow">FOTOAUTOMAT TEILEN</p>
-          <h2 id="share-title">Scan &amp; smile.</h2>
-          <p id="share-description">
-            Der QR-Code öffnet die temporäre öffentliche Website. Nach einer
-            Aufnahme verweist er direkt auf das Foto.
-          </p>
-          <a id="share-url" target="_blank" rel="noreferrer"></a>
-        </div>
-      </section>
-      <section class="gallery-section">
-        <div>
-          <p class="eyebrow">DEINE MOMENTE</p>
-          <h2>Zuletzt aufgenommen</h2>
-        </div>
-        <div id="gallery" class="gallery">
-          <p class="empty-gallery">Noch kein Foto aufgenommen.</p>
-        </div>
-      </section>
     </main>
-    <template id="photo-template"
-      ><a class="photo" target="_blank"><img alt="Aufgenommenes Foto" /></a
-    ></template>
-    <script src="app.js?v=2"></script>
+    <div id="photo-viewer" class="photo-viewer" role="dialog" aria-label="Dein Foto" hidden>
+      <img id="photo-viewer-image" class="photo-viewer-image" alt="Dein Foto" />
+      <canvas id="photo-viewer-fx" class="fx-canvas" aria-hidden="true"></canvas>
+      <div class="photo-viewer-bar">
+        <div class="photo-viewer-text">
+          <p id="photo-viewer-title" class="photo-viewer-title">Geschafft!</p>
+          <p id="photo-viewer-subtitle" class="photo-viewer-subtitle"></p>
+          <p id="photo-viewer-note" class="photo-viewer-note"></p>
+        </div>
+        <img id="photo-viewer-qr" class="photo-viewer-qr" alt="QR-Code zum Foto-Download" hidden />
+        <div id="photo-viewer-timer" class="photo-viewer-timer"><span id="photo-viewer-seconds">15</span></div>
+        <button id="photo-viewer-close" class="photo-viewer-close" type="button">Fertig</button>
+      </div>
+    </div>
+    <aside id="settings-panel" class="settings-panel" aria-label="Einstellungen" hidden>
+      <div class="settings-header">
+        <h2>Einstellungen</h2>
+        <button id="settings-close" class="icon-button" type="button" aria-label="Schließen">×</button>
+      </div>
+      <p class="settings-intro">Änderungen gelten sofort – beobachte die Messbalken im Kamerabild.
+        Der weiße Strich im Balken ist die Schwelle.</p>
+      <form id="settings-form" class="settings-form" onsubmit="return false"></form>
+      <p id="settings-status" class="settings-status"></p>
+      <button id="settings-reset" class="secondary-button" type="button">Standardwerte wiederherstellen</button>
+    </aside>
+    <script src="stencils.js?v=4"></script>
+    <script src="air_draw.js?v=10"></script>
+    <script src="effects.js?v=1"></script>
+    <script src="photo_viewer.js?v=2"></script>
+    <script src="settings_panel.js?v=1"></script>
+    <script src="app.js?v=21"></script>
   </body>
 </html>

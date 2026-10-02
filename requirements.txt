@@ -1,3 +1,9 @@
-numpy
-opencv-python
-qrcode
+# Runtime
+numpy>=1.24
+# mediapipe depends on the contrib build of OpenCV; do not install opencv-python next to it.
+opencv-contrib-python>=4.10
+mediapipe>=0.10.14
+qrcode>=7.4
+
+# Development
+pytest>=8.0
