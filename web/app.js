@@ -8,7 +8,7 @@ const RANDOM_KIND = 'random';
 const REVEAL_MS = 2200;       // new-challenge animation in the camera
 const ROUND = {
   holdMs: 3000,     // challenge must stay met this long (the 3-2-1 countdown); set from the settings
-  graceMs: 800,     // short detection gaps during the countdown are forgiven
+  graceMs: 1200,    // short detection gaps during the countdown are forgiven (hand gestures flicker)
 };
 const MENU_GROUPS = [   // dropdown sections by challenge family
   ['face', 'Look & Style'], ['expression', 'Grimassen'], ['hand', 'Hände'],
@@ -79,7 +79,8 @@ async function start() {
     await loadShareUrl();
     await loadNextChallenge();
     video.srcObject = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
+      // 720p: many webcams deliver 1080p only at a few frames per second, which blurs moving hands.
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
     });
     await new Promise(resolve => { video.onloadedmetadata = resolve; });
     updateStatus('Bereit', challenge.ready);

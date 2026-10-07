@@ -66,14 +66,19 @@ def evaluate_frame(code: str, frame: np.ndarray) -> tuple[Evaluation, int]:
 def warm_up_models() -> None:
     """Load the networks in the background so the first challenge does not stall."""
     blank = np.zeros((360, 640, 3), np.uint8)
-    for name, load in (("CLIP", lambda: FACE_EVALUATOR.attributes.model),
-                       ("Gesichtsausdrücke", lambda: FACE_EVALUATOR.expressions.analyze(blank, [])),
-                       ("Hände", lambda: GESTURE_EVALUATOR(Challenge("peace", 2), blank))):
-        try:
-            load()
-        except Exception as error:  # a missing model must not stop the booth; the affected challenges fail
-            logger.warning("Modell '%s' nicht verfügbar: %s", name, error)
-    logger.info("Alle Modelle bereit.")
+    logger.info("Lade Modelle ...")
+    failures = []
+    with models.quiet_native_stderr():
+        for name, load in (("CLIP", lambda: FACE_EVALUATOR.attributes.model),
+                           ("Gesichtsausdrücke", FACE_EVALUATOR.expressions.warm_up),
+                           ("Hände", lambda: GESTURE_EVALUATOR(Challenge("peace", 2), blank))):
+            try:
+                load()
+            except Exception as error:  # a missing model must not stop the booth; the affected challenges fail
+                failures.append((name, error))
+    for name, error in failures:
+        logger.warning("Modell '%s' nicht verfügbar: %s", name, error)
+    logger.info("Alle Modelle bereit." if not failures else "Modelle geladen (mit Fehlern, siehe oben).")
 
 
 # --------------------------------------------------------------- servers

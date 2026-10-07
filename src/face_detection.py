@@ -37,6 +37,8 @@ class FaceDetector:
     """Thread-safe YuNet wrapper; the input size follows the frame size."""
 
     def __init__(self, model_path: str = str(FACE_MODEL_PATH), score_threshold: float = FACE_SCORE_THRESHOLD):
+        # OpenCV 5 warns about an unsupported DNN target setting on every start; nothing to act on.
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
         self.detector = cv2.FaceDetectorYN.create(
             model=model_path, config="", input_size=(320, 320),
             score_threshold=score_threshold, nms_threshold=0.3, top_k=500,

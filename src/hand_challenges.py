@@ -157,43 +157,33 @@ class GestureChallengeEvaluator:
             return self._finger_sum(challenge, hands)
         check, label, noun = GESTURE_CHECKS[challenge.kind]
         matches = [bool(check(hand)) for hand in hands]
-        boxes, lines = [], []
-        for hand, matched in zip(hands, matches):
-            boxes.append(_hand_box(hand, label if matched else f"{label}?", matched))
-            lines.extend(_skeleton(hand, "success" if matched else "muted"))
+        boxes = [_hand_box(hand, label if matched else f"{label}?", matched) for hand, matched in zip(hands, matches)]
         met = int(min(sum(matches), challenge.required))
         complete = bool(met >= challenge.required)
         status = challenge_texts(challenge)["active"] if complete else f"{met}/{challenge.required} {noun}"
         if not complete and len(hands) < challenge.required:
             status += " – holt noch Hände dazu!" if hands else " – Hände in die Kamera!"
-        return Evaluation(score=float(met), complete=complete, boxes=boxes, lines=lines, status_text=status,
+        return Evaluation(score=float(met), complete=complete, boxes=boxes, status_text=status,
                           progress={"met": met, "required": challenge.required})
 
     @staticmethod
     def _finger_sum(challenge: Challenge, hands: list[Hand]) -> Evaluation:
         total = int(sum(hand.finger_count for hand in hands))
         complete = bool(total == challenge.target)
-        boxes, lines = [], []
-        for hand in hands:
-            boxes.append(_hand_box(hand, f"{hand.finger_count} Finger", complete))
-            lines.extend(_skeleton(hand, "success" if complete else "lavender"))
+        boxes = [_hand_box(hand, f"{hand.finger_count} Finger", complete) for hand in hands]
         if complete:
             status = challenge_texts(challenge)["active"]
         elif total > challenge.target:
             status = f"{total} Finger – {total - challenge.target} zu viel!"
         else:
             status = f"{total}/{challenge.target} Finger – noch {challenge.target - total}!"
-        return Evaluation(score=float(total), complete=complete, boxes=boxes, lines=lines, status_text=status,
+        return Evaluation(score=float(total), complete=complete, boxes=boxes, status_text=status,
                           progress={"met": int(complete), "required": 1})
 
 
 def _hand_box(hand: Hand, label: str, passed: bool) -> dict:
     x, y, width, height = hand.bbox
     return box(label, x, y, x + width, y + height, "success" if passed else "muted", passed=passed)
-
-
-def _skeleton(hand: Hand, color: str) -> list[dict]:
-    return [line(hand.point(a), hand.point(b), color) for a, b in HAND_CONNECTIONS]
 
 
 _shared_hand_detector = LazyHandDetector()

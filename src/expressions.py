@@ -40,7 +40,7 @@ class ExpressionAnalyzer:
         if self._landmarker is None:
             from mediapipe.tasks.python import BaseOptions, vision
 
-            logger.info("Lade Gesichtsausdruck-Modell …")
+            logger.info("Lade Gesichtsausdruck-Modell ...")
             # Passed as bytes: MediaPipe on Windows cannot open paths with special characters (OneDrive).
             options = vision.FaceLandmarkerOptions(
                 base_options=BaseOptions(model_asset_buffer=models.ensure(models.FACE_LANDMARKER).read_bytes()),
@@ -49,6 +49,14 @@ class ExpressionAnalyzer:
             )
             self._landmarker = vision.FaceLandmarker.create_from_options(options)
         return self._landmarker
+
+    def warm_up(self) -> None:
+        """Load the model and run it once, so the first real frame is fast."""
+        import mediapipe as mp
+
+        with self._lock:
+            blank = np.zeros((256, 256, 3), np.uint8)
+            self._get().detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=blank))
 
     def analyze(self, frame: np.ndarray, people: list[FaceFrame]) -> list[dict[str, float] | None]:
         """Per person: expression -> score (0..1), or None when the face could not be read."""

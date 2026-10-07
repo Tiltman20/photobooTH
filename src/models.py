@@ -7,8 +7,10 @@ internet access before the party, then the booth works offline.
 
 from __future__ import annotations
 
+import os
 import sys
 import urllib.request
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,7 +58,7 @@ def ensure(model: ModelFile) -> Path:
         return model.path
     model.path.parent.mkdir(parents=True, exist_ok=True)
     temporary = model.path.with_suffix(model.path.suffix + ".download")
-    print(f"Lade {model.description} herunter …")
+    print(f"Lade {model.description} herunter ...")
     try:
         urllib.request.urlretrieve(model.url, temporary, reporthook=_progress)
         print()
@@ -72,6 +74,22 @@ def _progress(blocks: int, block_size: int, total: int) -> None:
     if total > 0:
         done = min(blocks * block_size / total, 1.0)
         print(f"\r  {done:6.1%} von {total / 1e6:.0f} MB", end="", flush=True)
+
+
+@contextmanager
+def quiet_native_stderr():
+    """Hide the C++ warnings MediaPipe prints while loading (they cannot be switched off otherwise)."""
+    sys.stderr.flush()
+    saved = os.dup(2)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, 2)
+    try:
+        yield
+    finally:
+        sys.stderr.flush()
+        os.dup2(saved, 2)
+        os.close(devnull)
+        os.close(saved)
 
 
 def ensure_runtime_models() -> list[str]:

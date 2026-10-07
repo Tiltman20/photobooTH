@@ -173,7 +173,7 @@ def text_embeddings(prompts: tuple[str, ...]) -> np.ndarray:
         cache = _load_cache()
         missing = [prompt for prompt in prompts if prompt not in cache]
         if missing:
-            logger.info("Berechne %d neue CLIP-Prompts …", len(missing))
+            logger.info("Berechne %d neue CLIP-Prompts ...", len(missing))
             for prompt, vector in zip(missing, _encode_texts(missing)):
                 cache[prompt] = vector
             _save_cache(cache)
@@ -218,7 +218,7 @@ class AttributeAnalyzer:
     def model(self) -> ClipModel:
         with self._lock:
             if self._model is None:
-                logger.info("Lade CLIP-Modell …")
+                logger.info("Lade CLIP-Modell ...")
                 self._model = ClipModel()
                 logger.info("CLIP-Modell geladen.")
             return self._model
