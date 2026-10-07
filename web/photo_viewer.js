@@ -28,11 +28,11 @@ class PhotoViewer {
     this.photo = photo;
     this.onClose = onClose;
     this.image.src = photo.url;
-    this.title.textContent = completed ? 'Geschafft!' : 'Foto!';
+    this.title.textContent = completed ? 'Geschafft' : 'Foto';
     this.subtitle.textContent = photo.title || '';
     this.note.textContent = shareUrl
       ? 'QR-Code scannen, Foto aufs Handy laden und an der Theke vorzeigen.'
-      : 'Zeig das Foto an der Theke vor – es wird danach automatisch gelöscht.';
+      : 'Zeigt das Foto an der Theke vor – danach wird es automatisch gelöscht. Nichts wird gespeichert.';
     this.qr.hidden = !shareUrl;
     if (shareUrl) this.qr.src = `/api/share/qr?photo=${encodeURIComponent(photo.token)}`;
     this.root.hidden = false;

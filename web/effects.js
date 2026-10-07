@@ -1,16 +1,17 @@
-// Visual rewards: the big 3-2-1 countdown and a confetti burst after a photo.
+// Visual rewards: the big 3-2-1 countdown, a confetti burst after a photo and the daily score.
 
 const CONFETTI = {
   particles: 180,
   durationMs: 2600,
   gravity: 0.0009,   // px per ms², relative to canvas height
-  colors: ['#00e5ff', '#9b30ff', '#ff3df2', '#39d98a', '#ffd23f', '#ffffff'],
+  colors: ['#ff6a13', '#ff6a13', '#141414', '#9a9a9a', '#ffffff'],
 };
 
 class Countdown {
-  constructor(overlay, number) {
+  constructor(overlay, number, onSecond = null) {
     this.overlay = overlay;
     this.number = number;
+    this.onSecond = onSecond;   // called with every new number (for the beep)
     this.shown = null;
   }
 
@@ -24,6 +25,7 @@ class Countdown {
     this.number.classList.remove('pop');
     void this.number.offsetWidth;  // reflow, so the animation plays again
     this.number.classList.add('pop');
+    if (this.onSecond) this.onSecond(seconds);
   }
 
   hide() {
@@ -96,5 +98,34 @@ class ConfettiBurst {
       context.clearRect(0, 0, canvas.width, canvas.height);
       this.running = false;
     }
+  }
+}
+
+// Solved challenges of the current party on this booth computer. A party ends after 12 hours
+// without a solved challenge (a fixed day boundary would reset the score at midnight).
+const PARTY_GAP_MS = 12 * 60 * 60 * 1000;
+
+class SolvedCounter {
+  constructor(element) {
+    this.element = element;
+    let saved = {};
+    try { saved = JSON.parse(readPreference('photobooth.solved', '{}')) || {}; } catch { /* corrupt: start at 0 */ }
+    this.count = Date.now() - (saved.at || 0) < PARTY_GAP_MS ? Number(saved.count) || 0 : 0;
+    this.render(false);
+  }
+
+  increment() {
+    this.count += 1;
+    writePreference('photobooth.solved', JSON.stringify({ count: this.count, at: Date.now() }));
+    this.render(true);
+  }
+
+  render(bump) {
+    this.element.textContent = this.count;
+    if (!bump) return;
+    const pill = this.element.parentElement;
+    pill.classList.remove('bump');
+    void pill.offsetWidth;
+    pill.classList.add('bump');
   }
 }

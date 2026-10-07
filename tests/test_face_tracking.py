@@ -1,6 +1,6 @@
 """Tests for stable face ids across frames."""
 
-from face_dataclass import Face
+from face_detection import Face
 from face_tracking import FaceTracker, face_pose
 
 

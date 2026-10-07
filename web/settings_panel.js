@@ -3,7 +3,7 @@
 // visible in the live score meters while the camera keeps running.
 
 const SETTINGS_SAVE_DELAY_MS = 300;
-const SETTINGS_GROUPS = { thresholds: 'Erkennung (Schwellwerte)', timing: 'Ablauf' };
+const SETTINGS_GROUPS = { thresholds: 'Erkennung (KI-Schwellen)', faces: 'Gesichter', timing: 'Ablauf' };
 
 class SettingsPanel {
   constructor(panel, onChange) {

@@ -56,3 +56,6 @@ class PhotoStore:
         now = time.monotonic()
         for token in [token for token, photo in self._photos.items() if photo.expires_at <= now]:
             del self._photos[token]
+
+
+PHOTO_STORE = PhotoStore(lifetime_seconds=20.0)

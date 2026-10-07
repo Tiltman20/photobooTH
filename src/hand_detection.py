@@ -14,17 +14,13 @@ from __future__ import annotations
 import math
 import threading
 import time
-import urllib.request
 from dataclasses import dataclass
 from enum import IntEnum
-from pathlib import Path
 
 import cv2
 import numpy as np
 
-MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
-             "hand_landmarker/float16/latest/hand_landmarker.task")
-DEFAULT_MODEL_PATH = Path(__file__).resolve().parent.parent / "res" / "models" / "hand_landmarker.task"
+import models
 
 # A finger counts as extended when its tip is this much farther from the wrist than its PIP joint.
 FINGER_EXTENDED_RATIO = 1.15
@@ -140,25 +136,7 @@ def _angle_deg(a: np.ndarray, vertex: np.ndarray, b: np.ndarray) -> float:
     return math.degrees(math.acos(float(np.clip(np.dot(first, second) / norm, -1.0, 1.0))))
 
 
-# ------------------------------------------------------------ model access
-def ensure_model(model_path: Path = DEFAULT_MODEL_PATH) -> Path:
-    """Download the official hand landmarker model once if it is missing."""
-    if model_path.is_file():
-        return model_path
-    model_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = model_path.with_suffix(".download")
-    print(f"Lade Hand-Modell herunter: {MODEL_URL}")
-    try:
-        urllib.request.urlretrieve(MODEL_URL, temporary_path)
-    except OSError as error:
-        temporary_path.unlink(missing_ok=True)
-        raise RuntimeError(
-            f"Hand-Modell konnte nicht geladen werden ({error}). Lade es manuell von\n"
-            f"{MODEL_URL}\nund speichere es als {model_path}") from error
-    temporary_path.replace(model_path)
-    return model_path
-
-
+# ------------------------------------------------------------ detector
 class HandDetector:
     """Thread-safe wrapper around the MediaPipe Hand Landmarker (video mode).
 
@@ -167,14 +145,13 @@ class HandDetector:
     live camera stream.
     """
 
-    def __init__(self, model_path: Path = DEFAULT_MODEL_PATH, max_hands: int = 6,
-                 min_confidence: float = 0.4) -> None:
+    def __init__(self, max_hands: int = 6, min_confidence: float = 0.4) -> None:
         # Imported here so the finger logic above stays usable without MediaPipe.
         from mediapipe.tasks.python import BaseOptions, vision
 
         # The model is passed as bytes: MediaPipe on Windows cannot open paths
         # with special characters (e.g. OneDrive folders), a buffer always works.
-        model_bytes = ensure_model(model_path).read_bytes()
+        model_bytes = models.ensure(models.HAND_LANDMARKER).read_bytes()
         options = vision.HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_buffer=model_bytes),
             running_mode=vision.RunningMode.VIDEO,

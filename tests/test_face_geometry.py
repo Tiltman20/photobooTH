@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from face_dataclass import Face
+from face_detection import Face
 from face_geometry import FaceFrame, Region
 
 

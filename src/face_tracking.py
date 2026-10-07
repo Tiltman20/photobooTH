@@ -13,7 +13,7 @@ from itertools import count
 
 import numpy as np
 
-from face_dataclass import Face
+from face_detection import Face
 from face_geometry import FaceFrame
 
 
@@ -35,7 +35,7 @@ class FaceTracker:
     def update(self, faces: list[Face], now: float) -> list[tuple[int, FaceFrame]]:
         """Return (track id, face frame) for every face that has eye landmarks."""
         self._tracks = [track for track in self._tracks if now - track.seen_at <= self.forget_after]
-        frames = [frame for face in faces if (frame := _face_frame(face)) is not None]
+        frames = [frame for face in faces if (frame := FaceFrame.of(face)) is not None]
         pairs = sorted(
             ((float(np.hypot(*(frame.origin - track.center))) / track.eye_distance, t_index, f_index)
              for t_index, track in enumerate(self._tracks) for f_index, frame in enumerate(frames)),
@@ -57,13 +57,6 @@ class FaceTracker:
             track.center, track.eye_distance, track.seen_at = frame.origin, frame.eye_distance, now
             result.append((track.id, frame))
         return result
-
-
-def _face_frame(face: Face) -> FaceFrame | None:
-    try:
-        return FaceFrame(face)
-    except ValueError:
-        return None
 
 
 def face_pose(track_id: int, frame: FaceFrame) -> dict:

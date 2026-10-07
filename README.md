@@ -1,20 +1,13 @@
 # photobooTH
 
-Ein lokaler OpenCV-Fotoautomat: Sobald eine erkannte Person ihre Brille fuer
-drei Sekunden durchgehend im Kamerabild hat, wird automatisch ein Foto
-aufgenommen.
+Ein lokaler Party-Fotoautomat im Browser. Die Gäste bekommen zufällige
+Challenges („2 Leute mit Brille“, „Team Schwarz: 3 Leute“, „Kussmund-Crew“ …),
+neuronale Netze prüfen live, ob sie erfüllt sind, und nach einem
+3-2-1-Countdown entsteht automatisch das Foto. Das Foto mit eingebranntem
+Challenge-Banner ist der Nachweis, den die Gäste an der Theke vorzeigen.
 
-Desktop-App starten:
-
-```powershell
-python src/main.py
-```
-
-Die Aufnahmen liegen anschliessend im Ordner `captures/`.
-
-- `S`: Foto sofort speichern
-- `R`: Aufnahme wieder aktivieren
-- `Q` oder `ESC`: Fotoautomat beenden
+Es werden **keine Fotos gespeichert**: Bilder liegen nur kurz im Arbeitsspeicher
+(`src/photo_store.py`) und sind nach der Anzeigezeit weg.
 
 ## Installation (Windows)
 
@@ -24,154 +17,106 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Wer vorher schon `opencv-python` installiert hatte, entfernt es zuerst, weil
-MediaPipe die Variante `opencv-contrib-python` mitbringt:
+MediaPipe bringt `opencv-contrib-python` mit; ein vorher installiertes
+`opencv-python` bitte zuerst entfernen (`python -m pip uninstall -y opencv-python`).
+
+**Vor der Party einmal mit Internet** alle Modelle laden (ca. 320 MB), danach
+läuft alles offline:
 
 ```powershell
-python -m pip uninstall -y opencv-python
-python -m pip install -r requirements.txt
+python src/models.py
 ```
 
-Tests ausführen:
-
-```powershell
-python -m pytest tests
-```
-
-## Lokale Website
+## Starten
 
 ```powershell
 python src/web_server.py
 ```
 
-Danach `http://localhost:8000` öffnen und den Kamerazugriff erlauben.
-Mit `Strg+C` wird der Server beendet.
+Dann `http://localhost:8000` öffnen und den Kamerazugriff erlauben.
 
-### Ablauf einer Runde
-
-1. Eine Challenge wird zufällig gezogen (Mehrpersonen-Varianten bevorzugt).
-2. Sobald sie erfüllt ist, läuft ein großer 3-2-1-Countdown. Kurze
-   Erkennungsaussetzer (< 0,7 s) brechen ihn nicht ab.
-3. Das Foto erscheint im Vollbild (mit Konfetti) und wird nach 15 s gelöscht –
-   oder sofort mit `Fertig`. Ins Foto ist ein Banner mit der gelösten
-   Challenge und der Uhrzeit eingebrannt: das ist der Nachweis, den die Gäste
-   an der Theke vorzeigen. Challenge-Fotos entstehen nur automatisch (kein
-   manueller Auslöser); mit ngrok erscheint ein QR-Code zum Download aufs Handy. Danach geht es mit der
-   nächsten Challenge auf der Aufnahmeseite weiter. `Andere Challenge`
-   überspringt eine unlösbare Aufgabe.
-
-**Keine gespeicherten Bilder:** Die Website speichert Fotos nur im
-Arbeitsspeicher (`src/photo_store.py`) unter einem zufälligen Token. Nach
-Ablauf der Anzeigezeit sind sie weg; es entsteht kein `captures/`-Ordner mehr.
-(Nur die alte Desktop-App `src/main.py` speichert noch Dateien.)
-
-Im Dropdown lässt sich eine Art fest wählen (neue Varianten kommen trotzdem
-zufällig) oder `Zufall – alle Challenges`.
-
-| Challenge | Varianten | Prüfung (klassisch) |
-|---|---|---|
-| Brille | 1–3 Personen | Kanten des Brillenstegs zwischen den Augen |
-| Schnurrbart | 1–2 Personen | Oberlippe dunkler als die eigenen Wangen, Kinn hell |
-| Rote Haare | 1 Person | rote, texturierte Pixel über der Stirn, die nicht hautfarben sind |
-| Farb-Team | 1–3 Personen gleiche Farbe | Farbanteil am Oberkörper nach Weißabgleich |
-| Regenbogen-Crew | 3–4 verschiedene Farben | dominante Oberteil-Farbe pro Person |
-| Gegensätze | 1× mit + 1× ohne Brille | Brillen-Prüfung |
-| Gruppenfoto | 3–5 Personen | Gesichtsanzahl |
-| Daumen hoch | 2–4 Hände | nur Daumen gestreckt, zeigt nach oben |
-| Peace-Zeichen | 2–4 Hände | Zeige- und Mittelfinger gestreckt |
-| Alle Hände hoch | 4 oder 6 offene Hände | alle Finger gestreckt |
-| Finger-Summe | genau 7–15 Finger zusammen | Summe aller gestreckten Finger |
-| Masken-Werkstatt (Malen) | 2–3 Schablonen: Hüte, Hörner, Schnurrbärte oder frei | Foto per Knopf; ✓ wenn jede Schablone bemalt ist |
-
-Die Hand-Challenges nutzen die MediaPipe-Handerkennung (siehe unten).
-
-**Zuverlässigkeit:** Alle Prüfbereiche werden aus den fünf YuNet-Landmarks
-(Augen, Nase, Mundwinkel) berechnet und aufrecht in fester Auflösung
-ausgeschnitten (`src/face_geometry.py`) – Kopfneigung und Abstand verschieben
-sie nicht mehr. Dunkelheit wird relativ zur eigenen Hautfarbe gemessen, Farben
-nach Grauwelt-Weißabgleich.
-
-**Einstellungen (⚙ oben rechts):** Schieberegler für alle Schwellwerte, die
-Countdown-Länge und die Foto-Anzeigedauer. Änderungen gelten sofort – jede
-Person hat im Bild einen Messbalken, der weiße Strich ist die Schwelle. Die
-Werte werden in `settings.json` gespeichert (nicht im Git); die Standardwerte
-stehen in `TraitThresholds` (`src/face_checks.py`) und `RoundTiming`
-(`src/settings.py`).
-
-### Hand- und Fingererkennung (Debug)
-
-Im Dropdown `Debug: Hand- und Fingererkennung` wählen. Angezeigt werden pro
-Hand ein Rahmen mit Fingerzahl, das Hand-Skelett (lila) und die Spitzen der
-ausgestreckten Finger (grün). Rechts steht, welche Finger erkannt wurden.
-In dieser Ansicht wird kein Foto automatisch aufgenommen.
-
-Die Erkennung (`src/hand_detection.py`) nutzt den **MediaPipe Hand Landmarker**
-(neuronales Netz, 21 Punkte pro Hand). Ob ein Finger ausgestreckt ist, wird
-anschließend geometrisch entschieden:
-
-- Zeige-, Mittel-, Ring-, kleiner Finger: Fingerspitze deutlich weiter vom
-  Handgelenk entfernt als das mittlere Fingergelenk.
-- Daumen: nahezu gerade und vom Zeigefinger-Ansatz weg gerichtet.
-
-Das Modell (`res/models/hand_landmarker.task`, ca. 8 MB) wird beim ersten Start
-automatisch heruntergeladen. Klappt das nicht (Firewall/Proxy), manuell von
-<https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task>
-laden und unter diesem Pfad speichern.
-
-Bekannte Grenzen: Finger, die direkt in die Kamera zeigen, werden schlecht
-erkannt; Hände sollten gut beleuchtet und nicht zu klein im Bild sein.
-
-### Luftmalerei
-
-Im Dropdown `Luftmalerei` wählen und mit dem Zeigefinger in die Luft malen –
-die Linie erscheint als Neon-Spur über dem unveränderten Kamerabild.
-
-- Der Stift bleibt bei der Hand, die angefangen hat (`PenTracker` in
-  `src/gestures.py`); eine andere Hand übernimmt erst, wenn diese ~0,7 s weg ist.
-- Die Linie läuft als Kurve (Catmull-Rom) durch die gemessenen Fingerpunkte;
-  in diesem Modus wird so schnell wie möglich mit kleinerem Bild analysiert.
-- Nach einer Lücke > 0,35 s oder einem großen Sprung beginnt eine neue Linie,
-  statt eine gerade Verbindung zu ziehen.
-
-| Geste | Wirkung |
+| Taste | Wirkung |
 |---|---|
-| Nur Zeigefinger ausgestreckt (Daumen egal) | malen |
-| Zwei Finger, Faust, … | Stift absetzen, Cursor folgt weiter |
-| Offene Hand ca. 1 s halten | alles löschen |
+| `N` / `→` | andere Challenge |
+| `Leertaste` | Foto (freie Modi) bzw. Foto-Ansicht schließen |
+| `F` | Vollbild |
+| `M` | Ton an/aus |
+| `Esc` | Einstellungen / Foto schließen |
 
-`Foto jetzt aufnehmen` speichert das Foto samt Zeichnung. Die Gesten-Logik
-steht in `src/gestures.py`, die Darstellung in `web/air_draw.js`.
+Tests: `python -m pytest tests`
 
-### Masken-Werkstatt (Schablonen)
+## Ablauf einer Runde
 
-Oben im Bild erscheinen 2–3 Gesichts-Schablonen (Kopf, Augen, Nase, Mund).
-Die Gäste malen darauf mit dem Zeigefinger – je nach Runde Hüte, Hörner,
-Schnurrbärte oder frei. Jede Zeichnung wird in Gesichtskoordinaten gespeichert
-(`web/stencils.js`) und von einem echten Gesicht „getragen“: Schablone 1 von
-der Person ganz links, Schablone 2 von der nächsten usw. – ein Hut über dem
-Schablonen-Kopf sitzt also auf dem echten Kopf, ein Schnurrbart unter der
-Schablonen-Nase unter der echten Nase, und beides wandert mit.
-Offene Hand über einer Schablone löscht nur diese. Während des Malens sind nur
-die Schablonen zu sehen. Mit `Masken aufsetzen & Foto` verschwinden sie, die
-Masken sitzen auf den echten Gesichtern, und nach dem 3-2-1-Countdown entsteht
-das Foto (Banner mit ✓, wenn alle Schablonen bemalt waren). Eine Anleitung zu Malen,
-Absetzen, Löschen und Stift holen/abgeben steht in allen Malmodi im Bild.
+1. Eine Challenge wird zufällig gezogen (Varianten mit mehreren Personen
+   kommen häufiger – Leute kennenlernen ist der Sinn der Sache).
+2. Ist sie erfüllt, startet der Countdown. Kurze Erkennungsaussetzer (< 0,8 s)
+   brechen ihn nicht ab.
+3. Das Foto erscheint im Vollbild und wird nach der Anzeigezeit gelöscht.
+   Oben rechts zählt die Seite die gelösten Challenges der Party.
+
+## Challenges und Erkennung
+
+| Gruppe | Challenges | Erkennung |
+|---|---|---|
+| Look & Style | Brille, Brille + ohne Brille, Bart, Hut/Cap, Haarfarbe (rot, blond, bunt), Shirt-Farbe, Regenbogen-Crew | **CLIP** (Zero-Shot, `src/attributes.py`) |
+| Grimassen | Grinsen, Schrei (Mund auf), Kussmund, Gefühlschaos (3 Leute, 3 Ausdrücke) | **MediaPipe Face Landmarker**, Blendshapes (`src/expressions.py`) |
+| Gruppe | Gruppenfoto mit 3–6 Leuten | YuNet-Gesichtserkennung |
+| Hände | Daumen hoch, Peace, offene Hände, Finger-Mathe | **MediaPipe Hand Landmarker** (`src/hand_detection.py`) |
+| Kreativ | Masken-Werkstatt, Luftmalerei | Hand Landmarker + Face-Tracking |
+
+**Wie die Look-Erkennung funktioniert:** Jede Person wird anhand der
+YuNet-Landmarks aufrecht ausgeschnitten (Kopf bzw. Oberkörper). CLIP vergleicht
+den Ausschnitt mit mehreren Textbeschreibungen pro Antwort, z. B. „a photo of a
+person wearing glasses“ gegen „… without glasses“; ein Softmax liefert die
+Wahrscheinlichkeit. Werte werden pro Person über mehrere Bilder geglättet, damit
+ein einzelnes unsicheres Bild den Countdown nicht abbricht.
+
+Neue Merkmale brauchen nur neue Prompts in `QUESTIONS` (`src/attributes.py`).
+Danach einmal `python src/attributes.py` ausführen: das berechnet die
+Text-Embeddings neu und speichert sie in `res/clip_prompt_cache.json`, damit zur
+Laufzeit nur der Bild-Encoder nötig ist.
+
+**Einstellungen (Regler-Symbol oben rechts):** Schwellen für jedes Merkmal,
+Countdown und Anzeigedauer. Änderungen gelten sofort; im Kamerabild zeigt ein
+Balken unter jedem Label den aktuellen Wert, der Strich ist die Schwelle. Die
+Werte landen in `settings.json` (nicht im Git), die Standardwerte stehen in
+`src/settings.py`.
+
+## Projektstruktur
+
+```
+src/
+  web_server.py      HTTP-Server, API, Start
+  challenges.py      Katalog, Codes, Texte
+  face_challenges.py Auswertung der Gesichts-Challenges (zählen, glätten)
+  attributes.py      CLIP: Brille, Bart, Hut, Haare, Shirt
+  expressions.py     Face Landmarker: Grinsen, Schrei, Kussmund
+  hand_challenges.py Gesten, Luftmalerei, Hand-Debug
+  hand_detection.py  Hand Landmarker + Fingerlogik
+  gestures.py        Gesten und Stift-Tracking
+  face_detection.py  YuNet-Gesichtserkennung
+  face_geometry.py   Gesichtskoordinaten und Ausschnitte
+  face_tracking.py   stabile IDs über mehrere Bilder
+  models.py          Modell-Downloads
+  settings.py        einstellbare Schwellen und Zeiten
+  photo_store.py     Fotos nur im Arbeitsspeicher
+  share.py           QR-Download über ngrok
+web/                 Oberfläche (HTML/CSS/JS, keine Build-Tools)
+```
+
+### Luftmalerei und Masken-Werkstatt
+
+Zeigefinger ausgestreckt = malen, zwei Finger oder Faust = Stift absetzen,
+offene Hand halten = löschen. Der Stift bleibt bei der Hand, die angefangen hat.
+In der Masken-Werkstatt wird auf Gesichts-Schablonen gemalt; die Zeichnungen
+werden in Gesichtskoordinaten gespeichert und von den echten Gesichtern
+getragen (Schablone 1 = Person ganz links).
 
 ### Per QR-Code teilen (ngrok)
 
-> **Derzeit deaktiviert** (`NGROK_ENABLED = False` in `src/web_server.py`).
+> Derzeit deaktiviert (`NGROK_ENABLED = False` in `src/web_server.py`).
 
-Installiere den [ngrok-Agenten](https://ngrok.com/download), melde dich dort an
-und hinterlege einmalig deinen Token mit `ngrok config add-authtoken <TOKEN>`.
-Anschliessend startet diese Variante einen temporaeren HTTPS-Tunnel zu einem
-separaten Download-Server. Die Fotoautomaten-Website selbst bleibt auf
-`localhost`; nach jeder Aufnahme zeigt sie einen QR-Code an, der direkt zu
-diesem Foto fuehrt:
-
-```powershell
-python -m pip install -r requirements.txt
-python src/web_server.py --ngrok
-```
-
-Jede Person mit dem QR-Code kann die oeffentliche Website waehrend der Laufzeit
-des Tunnels aufrufen. Beende den Server mit `Strg+C`, um den Tunnel zu schliessen.
+Mit [ngrok](https://ngrok.com/download) und hinterlegtem Authtoken startet
+`python src/web_server.py --ngrok` einen separaten Download-Server mit
+HTTPS-Tunnel. Nach jeder Aufnahme erscheint ein QR-Code, der genau dieses Foto
+lädt, solange es noch existiert.

@@ -3,6 +3,11 @@ numpy>=1.24
 # mediapipe depends on the contrib build of OpenCV; do not install opencv-python next to it.
 opencv-contrib-python>=4.10
 mediapipe>=0.10.14
+# CLIP (glasses, beard, hat, hair and shirt colour) runs with ONNX Runtime.
+onnxruntime>=1.17
+# Only needed to compute embeddings for new CLIP prompts.
+tokenizers>=0.15
+# QR codes for photo downloads (ngrok sharing)
 qrcode>=7.4
 
 # Development

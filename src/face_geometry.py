@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from face_dataclass import Face
+from face_detection import Face
 
 
 @dataclass(frozen=True)
@@ -31,9 +31,6 @@ class Region:
     y0: float
     x1: float
     y1: float
-
-    def shifted(self, dx: float = 0.0, dy: float = 0.0) -> Region:
-        return Region(self.x0 + dx, self.y0 + dy, self.x1 + dx, self.y1 + dy)
 
 
 @dataclass(frozen=True)
@@ -50,6 +47,14 @@ class Patch:
 
 class FaceFrame:
     """Similarity transform between face coordinates and image pixels."""
+
+    @classmethod
+    def of(cls, face: Face) -> FaceFrame | None:
+        """The frame of a face, or None when the detector gave no eye landmarks."""
+        try:
+            return cls(face)
+        except ValueError:
+            return None
 
     def __init__(self, face: Face) -> None:
         if face.left_eye is None or face.right_eye is None:

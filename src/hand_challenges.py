@@ -8,8 +8,8 @@ import time
 
 import numpy as np
 
-from face_dataclass import Face
 from challenges import Challenge, challenge_texts
+from face_detection import Face
 from face_tracking import FaceTracker, face_pose
 from gestures import PenGesture, PenTracker, classify_pen_gesture, is_open_hand, is_peace_sign, is_thumbs_up, pen_position
 from hand_detection import HAND_CONNECTIONS, Hand, HandDetectionResult, HandDetector
@@ -48,7 +48,7 @@ class HandDebugEvaluator:
     def __init__(self, hand_detector: LazyHandDetector) -> None:
         self.hand_detector = hand_detector
 
-    def __call__(self, frame: np.ndarray, faces: list[Face], challenge: dict) -> Evaluation:
+    def __call__(self, frame: np.ndarray) -> Evaluation:
         started = time.perf_counter()
         result = self.hand_detector.get().detect(frame)
         analysis_ms = (time.perf_counter() - started) * 1000
@@ -96,7 +96,7 @@ class AirDrawEvaluator:
         self.hand_detector = hand_detector
         self.tracker = PenTracker()
 
-    def __call__(self, frame: np.ndarray, faces: list[Face], challenge: dict) -> Evaluation:
+    def __call__(self, frame: np.ndarray) -> Evaluation:
         pointer = self.pen_pointer(frame)
         status = PEN_STATUS[PenGesture(pointer["gesture"])] if pointer else None
         return Evaluation(score=float(pointer is not None), complete=False, status_text=status, pointer=pointer)
@@ -159,7 +159,7 @@ class GestureChallengeEvaluator:
         matches = [bool(check(hand)) for hand in hands]
         boxes, lines = [], []
         for hand, matched in zip(hands, matches):
-            boxes.append(_hand_box(hand, f"{label} ✓" if matched else f"{label}?", matched))
+            boxes.append(_hand_box(hand, label if matched else f"{label}?", matched))
             lines.extend(_skeleton(hand, "success" if matched else "muted"))
         met = int(min(sum(matches), challenge.required))
         complete = bool(met >= challenge.required)
@@ -199,7 +199,8 @@ def _skeleton(hand: Hand, color: str) -> list[dict]:
 _shared_hand_detector = LazyHandDetector()
 GESTURE_EVALUATOR = GestureChallengeEvaluator(_shared_hand_detector)
 DRAWING_EVALUATOR = DrawingChallengeEvaluator(AirDrawEvaluator(_shared_hand_detector))
-HAND_EVALUATORS = {
+# Free modes by id; they only need the frame.
+FREE_MODE_EVALUATORS = {
     "hands": HandDebugEvaluator(_shared_hand_detector),
     "air_draw": AirDrawEvaluator(_shared_hand_detector),
 }

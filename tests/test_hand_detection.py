@@ -5,7 +5,8 @@ import math
 import numpy as np
 import pytest
 
-from hand_detection import DEFAULT_MODEL_PATH, find_extended_fingers
+import models
+from hand_detection import find_extended_fingers
 
 # Base knuckles (MCP) of index, middle, ring and pinky; wrist at the origin, fingers point up (-y).
 FINGER_BASES_X = (-0.30, -0.05, 0.18, 0.38)
@@ -54,7 +55,7 @@ def test_finger_order_is_thumb_to_pinky():
     assert find_extended_fingers(landmarks) == ("thumb", "middle", "pinky")
 
 
-@pytest.mark.skipif(not DEFAULT_MODEL_PATH.is_file(), reason="hand_landmarker.task not downloaded")
+@pytest.mark.skipif(not models.HAND_LANDMARKER.path.is_file(), reason="hand_landmarker.task not downloaded")
 def test_model_runs_on_empty_frame():
     pytest.importorskip("mediapipe")
     from hand_detection import HandDetector

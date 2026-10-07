@@ -203,8 +203,13 @@ cython_debug/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
-# Locally captured booth photos
+# Locally captured booth photos (old desktop app)
 captures/
+
+# Big neural networks are downloaded on first start (see src/models.py)
+res/models/clip_*
+res/models/face_landmarker.task
+res/models/*.download
 
 # Ruff stuff:
 .ruff_cache/

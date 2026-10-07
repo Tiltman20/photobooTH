@@ -1,4 +1,4 @@
-// Futuristic air drawing: neon strokes follow the index fingertip.
+// Air drawing: glowing strokes follow the index fingertip.
 //
 // Strokes are drawn as smooth Catmull-Rom curves *through the measured
 // fingertip positions*, so fast movements become curves instead of straight
@@ -50,7 +50,7 @@ class AirDrawing {
     this.clearSince = null;
     this.lastUpdateAt = 0;
     this.huePhase = 0;
-    this.hue = 190;
+    this.hue = 22;
     this.sparks = [];
     this.flash = 0;
     if (this.board) this.board.reset();
@@ -169,7 +169,7 @@ class AirDrawing {
 
   nextHue(last, point) {
     if (last) this.huePhase += Math.hypot(point.x - last.x, point.y - last.y) * 0.004;
-    this.hue = 250 + 70 * Math.sin(this.huePhase);   // sweeps cyan → violet → magenta along the line
+    this.hue = 22 + 12 * Math.sin(this.huePhase);   // varies between orange tones along the line
     return this.hue;
   }
 
@@ -314,7 +314,7 @@ class AirDrawing {
     const context = this.context;
     const { x, y } = this.cursor;
     const scale = AIR_DRAW.renderScale;
-    const color = { draw: `hsl(${this.hue}, 100%, 70%)`, hover: 'rgba(255, 255, 255, .85)', clear: '#ff3df2' }[this.gesture];
+    const color = { draw: `hsl(${this.hue}, 100%, 70%)`, hover: 'rgba(255, 255, 255, .85)', clear: '#141414' }[this.gesture];
     const radius = (this.gesture === 'draw' ? 11 : 16) * scale;
     const rotation = performance.now() / 600;
     context.save();
@@ -348,10 +348,10 @@ class AirDrawing {
     context.restore();
   }
 
-  // Short magenta flash across the image after erasing.
+  // Short orange flash across the image after erasing.
   renderFlash(elapsed) {
     if (this.flash <= 0) return;
-    this.context.fillStyle = `rgba(255, 61, 242, ${this.flash * 0.25})`;
+    this.context.fillStyle = `rgba(255, 106, 19, ${this.flash * 0.25})`;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.flash = Math.max(0, this.flash - elapsed / 350);
   }

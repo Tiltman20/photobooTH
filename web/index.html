@@ -3,98 +3,98 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>photo challenge</title>
-    <link rel="stylesheet" href="style.css?v=19" />
+    <title>photobooTH</title>
+    <!-- Without internet the booth falls back to system fonts (Consolas, Arial Black). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Tektur:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <main class="app-shell">
       <header>
-        <div>
-          <p class="eyebrow">LOCAL PHOTO EXPERIENCE</p>
-          <h1 id="booth-title">photo challenge</h1>
-        </div>
-        <div class="header-chips">
+        <h1 class="logo">photoboo<span>TH</span></h1>
+        <div class="header-tools">
+          <span class="solved-counter" title="Gelöste Challenges dieser Party"><b id="solved-count">0</b> geschafft</span>
           <span id="state-chip" class="chip">Bereit</span>
-          <button id="settings-button" class="icon-button" type="button" aria-label="Einstellungen" title="Einstellungen">⚙</button>
+          <button id="sound-button" class="icon-button" type="button" aria-label="Ton an/aus" title="Ton an/aus (M)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" /><path class="sound-wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" /></svg>
+          </button>
+          <button id="fullscreen-button" class="icon-button" type="button" aria-label="Vollbild" title="Vollbild (F)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+          </button>
+          <button id="settings-button" class="icon-button" type="button" aria-label="Einstellungen" title="Einstellungen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+          </button>
         </div>
       </header>
-      <section class="hero">
+
+      <section class="stage">
         <div class="camera-card">
           <video id="video" autoplay playsinline muted></video>
           <canvas id="canvas" hidden></canvas>
-          <canvas
-            id="bounding-boxes"
-            class="bounding-boxes"
-            aria-hidden="true"
-          ></canvas>
+          <canvas id="bounding-boxes" class="bounding-boxes" aria-hidden="true"></canvas>
           <canvas id="air-canvas" class="air-canvas" aria-hidden="true" hidden></canvas>
           <div id="draw-guide" class="draw-guide" hidden>
             <p class="draw-guide-title">So malst du in die Luft</p>
             <ul>
-              <li><span aria-hidden="true">☝️</span>Nur Zeigefinger: <b>malen</b></li>
-              <li><span aria-hidden="true">✌️</span>Zwei Finger oder Faust: <b>Stift absetzen</b></li>
-              <li><span aria-hidden="true">🖐️</span><span id="guide-erase">Hand offen 1 s halten: alles löschen</span></li>
-              <li><span aria-hidden="true">🔑</span>Stift holen: Zeigefinger zeigen · abgeben: Hand kurz aus dem Bild</li>
+              <li><b>Nur Zeigefinger</b> – malen</li>
+              <li><b>Zwei Finger oder Faust</b> – Stift absetzen</li>
+              <li><b>Hand offen halten</b> – <span id="guide-erase">alles löschen</span></li>
+              <li><b>Stift abgeben</b> – Hand kurz aus dem Bild nehmen</li>
             </ul>
-            <p id="pen-status" class="pen-status">Stift: frei – Zeigefinger zeigen zum Übernehmen</p>
+            <p id="pen-status" class="pen-status">Stift frei – Zeigefinger zeigen zum Übernehmen</p>
           </div>
-          <div class="camera-overlay">
-            <span id="detection-dot" class="dot"></span
-            ><span id="detection-label">Kamera wird vorbereitet</span>
+          <div class="camera-status">
+            <span id="detection-dot" class="dot"></span><span id="detection-label">Kamera wird vorbereitet …</span>
+          </div>
+          <div id="challenge-reveal" class="challenge-reveal" hidden>
+            <span class="reveal-label">Neue Challenge</span>
+            <span id="reveal-title" class="reveal-title"></span>
           </div>
           <div id="countdown-overlay" class="countdown-overlay" aria-live="polite" hidden>
             <span id="countdown-number" class="countdown-number">3</span>
+            <span class="countdown-hint">Bleibt so</span>
           </div>
           <div id="flash" class="flash" aria-hidden="true"></div>
         </div>
-        <aside class="instruction-card">
-          <p class="eyebrow">SO EINFACH</p>
-          <h2 id="challenge-title">Deine Foto-Challenge wird geladen.</h2>
-          <p id="challenge-description">Einen Moment bitte.</p>
-          <div class="challenge-meta">
-            <div id="people-progress" class="people-progress" hidden></div>
+
+        <aside class="challenge-card">
+          <span id="challenge-category" class="category-chip">Challenge</span>
+          <h2 id="challenge-title">Challenge wird geladen …</h2>
+          <p id="challenge-description" class="challenge-description">Einen Moment.</p>
+          <div id="people-progress" class="people-progress" hidden></div>
+          <div id="countdown-bar" class="countdown-bar">
+            <div class="progress-track"><div id="progress" class="progress-bar"></div></div>
+            <span id="countdown">3 s</span>
           </div>
-          <label class="challenge-picker" for="challenge-select">
-            <span>Challenge auswählen</span>
-            <select id="challenge-select" disabled></select>
-          </label>
           <div id="debug-panel" class="debug-panel" hidden>
-            <p class="eyebrow">DEBUG · HANDERKENNUNG</p>
+            <p class="eyebrow">Debug · Handerkennung</p>
             <p id="debug-details"></p>
           </div>
-          <div class="progress-info">
-            <span id="countdown">3.0 s</span><span>bis zum Foto</span>
+
+          <div class="actions">
+            <button id="manual-capture" class="primary-button" type="button">
+              <span id="manual-capture-label">Foto aufnehmen</span>
+            </button>
+            <button id="air-clear" class="secondary-button" type="button" hidden>Zeichnung löschen</button>
+            <button id="skip-challenge" class="secondary-button" type="button" title="Andere Challenge (N)">Andere Challenge</button>
           </div>
-          <div class="progress-track">
-            <div id="progress" class="progress-bar"></div>
-          </div>
-          <button id="air-clear" class="secondary-button" type="button" hidden>
-            Zeichnung löschen <span>×</span>
-          </button>
-          <button id="skip-challenge" class="secondary-button" type="button">
-            Andere Challenge <span>↻</span>
-          </button>
-          <button id="manual-capture" type="button">
-            <b id="manual-capture-label">Foto jetzt aufnehmen</b> <span>→</span>
-          </button>
-          <section id="share-card" class="share-card" hidden>
-            <img id="share-qr" alt="QR-Code zum Foto-Download" hidden />
-            <div>
-              <p id="share-eyebrow" class="eyebrow">FOTOAUTOMAT TEILEN</p>
-              <h2 id="share-title">Scan &amp; smile.</h2>
-              <p id="share-description">
-                Der QR-Code öffnet die temporäre öffentliche Website. Nach einer
-                Aufnahme verweist er direkt auf das Foto.
-              </p>
-              <a id="share-url" target="_blank" rel="noreferrer"></a>
-            </div>
-          </section>
+
+          <label class="challenge-picker" for="challenge-select">
+            <span>Modus</span>
+            <select id="challenge-select" disabled></select>
+          </label>
+          <p class="proof-hint">Challenge geschafft? Foto an der Theke vorzeigen.</p>
         </aside>
       </section>
     </main>
+
     <div id="photo-viewer" class="photo-viewer" role="dialog" aria-label="Dein Foto" hidden>
-      <img id="photo-viewer-image" class="photo-viewer-image" alt="Dein Foto" />
       <canvas id="photo-viewer-fx" class="fx-canvas" aria-hidden="true"></canvas>
+      <div class="photo-frame">
+        <img id="photo-viewer-image" class="photo-viewer-image" alt="Dein Foto" />
+      </div>
       <div class="photo-viewer-bar">
         <div class="photo-viewer-text">
           <p id="photo-viewer-title" class="photo-viewer-title">Geschafft!</p>
@@ -102,26 +102,31 @@
           <p id="photo-viewer-note" class="photo-viewer-note"></p>
         </div>
         <img id="photo-viewer-qr" class="photo-viewer-qr" alt="QR-Code zum Foto-Download" hidden />
-        <div id="photo-viewer-timer" class="photo-viewer-timer"><span id="photo-viewer-seconds">15</span></div>
-        <button id="photo-viewer-close" class="photo-viewer-close" type="button">Fertig</button>
+        <div id="photo-viewer-timer" class="photo-viewer-timer"><span id="photo-viewer-seconds">20</span></div>
+        <button id="photo-viewer-close" class="primary-button photo-viewer-close" type="button">Weiter</button>
       </div>
     </div>
+
     <aside id="settings-panel" class="settings-panel" aria-label="Einstellungen" hidden>
       <div class="settings-header">
         <h2>Einstellungen</h2>
-        <button id="settings-close" class="icon-button" type="button" aria-label="Schließen">×</button>
+        <button id="settings-close" class="icon-button" type="button" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
       </div>
-      <p class="settings-intro">Änderungen gelten sofort – beobachte die Messbalken im Kamerabild.
-        Der weiße Strich im Balken ist die Schwelle.</p>
+      <p class="settings-intro">Änderungen gelten sofort. Unter jedem Label im Kamerabild zeigt ein Balken den
+        aktuellen Wert, der dunkle Strich ist die Schwelle: Balken darüber zählt.</p>
       <form id="settings-form" class="settings-form" onsubmit="return false"></form>
       <p id="settings-status" class="settings-status"></p>
       <button id="settings-reset" class="secondary-button" type="button">Standardwerte wiederherstellen</button>
     </aside>
-    <script src="stencils.js?v=4"></script>
-    <script src="air_draw.js?v=10"></script>
-    <script src="effects.js?v=1"></script>
-    <script src="photo_viewer.js?v=2"></script>
-    <script src="settings_panel.js?v=1"></script>
-    <script src="app.js?v=21"></script>
+
+    <script src="sounds.js"></script>
+    <script src="stencils.js"></script>
+    <script src="air_draw.js"></script>
+    <script src="effects.js"></script>
+    <script src="photo_viewer.js"></script>
+    <script src="settings_panel.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

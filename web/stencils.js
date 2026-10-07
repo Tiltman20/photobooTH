@@ -116,7 +116,7 @@ class StencilBoard {
     const area = STENCILS.area;
     context.save();
     context.fillStyle = 'rgba(10, 8, 20, .16)';
-    context.strokeStyle = drawn ? 'rgba(57, 217, 138, .95)' : 'rgba(255, 255, 255, .7)';
+    context.strokeStyle = drawn ? 'rgba(255, 106, 19, .95)' : 'rgba(255, 255, 255, .7)';
     context.lineWidth = 2.2 * this.renderScale;
     context.setLineDash(drawn ? [] : [7 * this.renderScale, 5 * this.renderScale]);
     const [left, top] = at(area.u0, area.v0);
@@ -133,19 +133,19 @@ class StencilBoard {
     context.moveTo(...at(-0.45, 1.2)); context.quadraticCurveTo(...at(0, 1.45), ...at(0.45, 1.2));
     context.stroke();
     context.font = `800 ${22 * this.renderScale}px ui-sans-serif, system-ui`;
-    context.fillStyle = drawn ? '#39d98a' : '#ffffff';
-    context.fillText(drawn ? `${key + 1} ✓` : `${key + 1}`, left + 10 * this.renderScale, top + 27 * this.renderScale);
+    context.fillStyle = drawn ? '#ff6a13' : '#ffffff';
+    context.fillText(`${key + 1}`, left + 10 * this.renderScale, top + 27 * this.renderScale);
     context.restore();
   }
 
   renderBadge(context, point, key, drawn) {
     const radius = 19 * this.renderScale;
     context.save();
-    context.fillStyle = drawn ? 'rgba(57, 217, 138, .95)' : 'rgba(20, 16, 24, .75)';
+    context.fillStyle = drawn ? 'rgba(255, 106, 19, .95)' : 'rgba(20, 16, 24, .75)';
     context.beginPath();
     context.arc(point.x, point.y, radius, 0, Math.PI * 2);
     context.fill();
-    context.fillStyle = drawn ? '#10281a' : '#ffffff';
+    context.fillStyle = drawn ? '#141414' : '#ffffff';
     context.font = `800 ${22 * this.renderScale}px ui-sans-serif, system-ui`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
