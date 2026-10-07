@@ -30,10 +30,11 @@ python src/models.py
 ## Starten
 
 ```powershell
-python src/web_server.py
+python main.py
 ```
 
-Dann `http://localhost:8000` öffnen und den Kamerazugriff erlauben.
+Der Browser öffnet sich automatisch mit `http://localhost:8000`; dort den
+Kamerazugriff erlauben. Beenden mit `Strg+C`.
 
 | Taste | Wirkung |
 |---|---|
